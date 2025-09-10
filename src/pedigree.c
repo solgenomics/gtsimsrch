@@ -529,7 +529,7 @@ Pedigree_stats* bitwise_triple_counts(Accession* par1, Accession* par2, Accessio
    
     //   unsigned long long is00_2_22_0 = (i0 & j0 & k2) | (i2 & j2 & k0) & ~missing;
     unsigned long long is1_00_1_22 = k1 & is00_22 & ~missing;
-    unsigned long long isx_11 = i1 & j1 & ~missing; //
+    unsigned long long isx_11 = i1 & j1 & ~missing; // both parents het, none missing
     
     unsigned long long is_i0or2_k1 = (i0 | i2) & k1; // & ~missing;    
     unsigned long long is0x_0_or_2x_2 = (i0 & k0) | (i2 & k2);
@@ -568,7 +568,7 @@ Pedigree_stats* bitwise_triple_counts(Accession* par1, Accession* par2, Accessio
     hgmr2_denominator += __builtin_popcountll(jk_not_1);
   
     n_total_no_md += 64 - __builtin_popcountll(missing);
-    n_total_x_11 += __builtin_popcountll(isx_11); // 
+    n_total_x_11 += __builtin_popcountll(isx_11); // both parents are het, none missing.
 
     ndiff12 += __builtin_popcountll(i_ne_j);
     ndiff01 += __builtin_popcountll(i_ne_k);
@@ -584,9 +584,9 @@ Pedigree_stats* bitwise_triple_counts(Accession* par1, Accession* par2, Accessio
   pedigree_stats->agmr02 = (ND) {ndiff02, n_total_no_md};
 
   long F = 1;
-  pedigree_stats->d = (ND) {n_0xorx0_2_nomd + n_2xorx2_0_nomd
-			    + F*n_00_1_22_1
-			    , n_total_no_md};
+  pedigree_stats->d = (ND) { n_0xorx0_2_nomd + n_2xorx2_0_nomd
+			     + F*n_00_1_22_1
+			     , n_total_no_md    - n_total_x_11 };
   pedigree_stats->z = (ND) {n_00_1_22_1, n_00_22};
   pedigree_stats->par1_hgmr = (ND) {hgmr1_numerator, hgmr1_denominator};
   pedigree_stats->par2_hgmr = (ND) {hgmr2_numerator, hgmr2_denominator};
@@ -595,6 +595,7 @@ Pedigree_stats* bitwise_triple_counts(Accession* par1, Accession* par2, Accessio
   pedigree_stats->n_01or10_1 = n_01or10_1;
   pedigree_stats->all_good_count = n_total_no_md;
 
+  //fprintf(stderr, "XXXX: %ld  %ld   %ld\n", n_total_no_md, n_total_x_11, n_total_no_md-n_total_x_11);
   // pedigree_stats->d_n = n_over_d(pedigree_stats->d)/the_gtset->mean_d;
   
   //assert(pedigree_stats->par1_R.n == Rnd.n);
@@ -690,6 +691,155 @@ Pedigree_stats* construct_pedigree_stats(void){
   the_ps->xhgmr2 = NAN;
   return the_ps;
 }
+
+double calculate_xFTR(Pedigree* the_pedigree, const GenotypesSet* the_gtsset){
+  long N = 0; // counts forbidden triples
+  double D = 0; //  
+  if(the_pedigree->A == NULL  || the_pedigree->F == NULL  ||  the_pedigree->M == NULL){
+    return -1;
+  }else{
+    // Vlong** marker_dosage_counts; // counts of dosages for each marker. marker_dosage_counts->[i]->a[j] is count of dosage i for marker j
+    Vchar* Agts = the_pedigree->A->genotypes;
+    Vchar* Fgts = the_pedigree->F->genotypes;
+    Vchar* Mgts = the_pedigree->M->genotypes;
+    for(long i=0; i<Agts->length; i++){
+      double ok_count = (double)(the_gtsset->accessions->size - the_gtsset->marker_missing_data_counts->a[i]);
+      char Fgt = Fgts->a[i];
+      char Mgt = Mgts->a[i];
+      char Agt = Agts->a[i];
+      if(Fgt == '0'){
+	if(Mgt == '0'){	  
+	  D += (the_gtsset->marker_dosage_counts[1]->a[i] + the_gtsset->marker_dosage_counts[2]->a[i])/ok_count;
+	  if(Agt == '1' || Agt == '2') N++;
+	}else if(Mgt == '1'){
+	  D += (the_gtsset->marker_dosage_counts[2]->a[i])/ok_count;
+	  if(Agt == '2') N++;
+	}else if(Mgt == '2'){
+	  D += (the_gtsset->marker_dosage_counts[0]->a[i] + the_gtsset->marker_dosage_counts[2]->a[i])/ok_count;
+	  if(Agt == '0' || Agt == '2') N++;
+	}
+      }else if(Fgt == '1'){
+	if(Mgt == '0'){	  
+	  D += (the_gtsset->marker_dosage_counts[2]->a[i])/ok_count;
+	  if(Agt == '2') N++;
+	}else if(Mgt == '2'){
+	  D += (the_gtsset->marker_dosage_counts[0]->a[i])/ok_count;
+	  if(Agt == '0') N++;
+	}
+      }else if(Fgt == '2'){
+	if(Mgt == '0'){	  
+	  D += (the_gtsset->marker_dosage_counts[0]->a[i] + the_gtsset->marker_dosage_counts[2]->a[i])/ok_count;
+	  if(Agt == '0' || Agt == '2') N++;
+	}else if(Mgt == '1'){
+	  D += (the_gtsset->marker_dosage_counts[0]->a[i])/ok_count;
+	  if(Agt == '0') N++;
+	}else if(Mgt == '2'){
+	  if(Agt == '1' || Agt == '0') N++;
+	  D += (the_gtsset->marker_dosage_counts[1]->a[i] +  the_gtsset->marker_dosage_counts[0]->a[i])/ok_count;
+	}  
+      }
+    }
+    return (D>0)? N/D : -1;
+  }
+}
+
+double calculate_xxFTR(Pedigree* the_pedigree, const GenotypesSet* the_gtsset, double alpha){
+  long N = 0; // counts forbidden triples
+  double d = 0; // expected number of forbidden triples based on proportions of 0, 1, 2 in this accession
+  double D = 0; // expected number of forbidden triples based proportions of 0, 1, 2 in each marker.
+  if(the_pedigree->A == NULL  || the_pedigree->F == NULL  ||  the_pedigree->M == NULL){
+    return -1;
+  }else{
+    // Vlong** marker_dosage_counts; // counts of dosages for each marker. marker_dosage_counts->[i]->a[j] is count of dosage i for marker j
+    Accession* A = the_pedigree->A;
+    Accession* F = the_pedigree->F;
+    Accession* M = the_pedigree->M;
+    Vchar* Agts = A->genotypes;
+    Vchar* Fgts = F->genotypes;
+    Vchar* Mgts = M->genotypes;
+    double acc_ok_count_x = (double)(A->dosage_counts[0] + A->dosage_counts[1] + A->dosage_counts[2]); // count of missing gts in this accessions,
+    long A0 = 0; long A1 = 0; long A2 = 0;
+    for(long i=0; i<Agts->length; i++){
+      char Fgt = Fgts->a[i];
+      char Mgt = Mgts->a[i];
+      char Agt = Agts->a[i];
+      if(Fgt == 'X' || Mgt == 'X' || Agt == 'X') continue;
+      if(Fgt == '1'  &&  Mgt == '1') continue;
+      if(Agt == '0'){ A0++; }
+      else if(Agt == '1'){ A1++; }
+      else if(Agt == '2'){ A2++; }
+    }
+    double acc_ok_count = A0 + A1 + A2;
+    long ok_triple_count = 0;
+    fprintf(stderr, "fdsa: %7.5f %7.5f \n", acc_ok_count_x, acc_ok_count);
+    // but should exclude missing gts in parents also, i.e. only count markers with valid gts in all 3.
+    for(long i=0; i<Agts->length; i++){
+      double marker_ok_count =   // the number of accessions with non-missing genotypes for this marker
+	(double)(the_gtsset->accessions->size - the_gtsset->marker_missing_data_counts->a[i]);
+      char Fgt = Fgts->a[i];
+      char Mgt = Mgts->a[i];
+      char Agt = Agts->a[i];
+  
+      if(Fgt == '0'){
+	if(Mgt == '0'){ // Agt = 1, 2 forbidden
+	  // fprintf(stderr, "ZZZ: %ld  %ld  %ld \n", acc_ok_count, A->dosage_counts[1], A->dosage_counts[2]);
+	  d += A1 + A2; // /acc_ok_count;
+	  D += (the_gtsset->marker_dosage_counts[1]->a[i] + the_gtsset->marker_dosage_counts[2]->a[i])/marker_ok_count;
+	  ok_triple_count++;
+	  if(Agt == '1' || Agt == '2') N++; // 
+	}else if(Mgt == '1'){ // 2 forbidden
+	  d += A2; // /acc_ok_count;
+	  D += (the_gtsset->marker_dosage_counts[2]->a[i])/marker_ok_count;
+	  ok_triple_count++;
+	  if(Agt == '2') N++;
+	}else if(Mgt == '2'){ // 0, 2 forbidden
+	  d += A0 + A2; // /acc_ok_count;
+	  D += (the_gtsset->marker_dosage_counts[0]->a[i] + the_gtsset->marker_dosage_counts[2]->a[i])/marker_ok_count;
+	  ok_triple_count++;
+	  if(Agt == '0' || Agt == '2') N++;
+	}
+      }else if(Fgt == '1'){
+	if(Mgt == '0'){	// 2 forbidden
+	  d += A2;
+	  D += (the_gtsset->marker_dosage_counts[2]->a[i])/marker_ok_count;
+	  ok_triple_count++;
+	  if(Agt == '2') N++;
+	}else if(Mgt == '1'){
+	  
+	}else if(Mgt == '2'){ // 0 forbidden
+	  d += A0;
+	  D += (the_gtsset->marker_dosage_counts[0]->a[i])/marker_ok_count;
+	  ok_triple_count++;
+	  if(Agt == '0') N++;
+	}
+      }else if(Fgt == '2'){
+	if(Mgt == '0'){	// 0, 2 forbidden  
+	  d += A0 + A2;
+	  D += (the_gtsset->marker_dosage_counts[0]->a[i] + the_gtsset->marker_dosage_counts[2]->a[i])/marker_ok_count;
+	  ok_triple_count++;
+	  if(Agt == '0' || Agt == '2') N++;
+	}else if(Mgt == '1'){ // 0 forbidden
+	  d += A0;
+	  D += (the_gtsset->marker_dosage_counts[0]->a[i])/marker_ok_count;
+	  ok_triple_count++;
+	  if(Agt == '0') N++;
+	}else if(Mgt == '2'){ // 0, 1 forbidden
+	  if(Agt == '1' || Agt == '0') N++;
+	  d += A0 + A1;
+	  D += (the_gtsset->marker_dosage_counts[1]->a[i] +  the_gtsset->marker_dosage_counts[0]->a[i])/marker_ok_count;
+	  ok_triple_count++;
+	}  
+      }
+    }
+    d /= acc_ok_count;
+    fprintf(stderr, "asdf  %ld  %7.5f  %7.5f  %ld\n", N, d, D, ok_triple_count);
+    return (D>0 && d>0)? alpha*(N/d) + (1.0-alpha)*(N/D) : -1;
+  }
+}
+
+
+
+
 Pedigree_stats* calculate_pedigree_stats(Pedigree* the_pedigree, const GenotypesSet* the_gtsset){
   long ploidy = the_gtsset->ploidy;
   Pedigree_stats* the_ps; //  = construct_pedigree_stats(); // (Pedigree_stats*)calloc(1, sizeof(Pedigree_stats));
@@ -746,6 +896,7 @@ Pedigree_stats* calculate_pedigree_stats(Pedigree* the_pedigree, const Genotypes
   the_ps->R2_n = n_over_d(the_ps->par2_R)/the_gtsset->mean_R;
   the_ps->d_n = n_over_d(the_ps->d)/the_gtsset->mean_d;
   the_ps->z_n = n_over_d(the_ps->z)/the_gtsset->mean_z;
+  the_ps->ftc_n = the_ps->d.n/the_gtsset->mean_ftc;
   
   //  the_ps->xhgmr1 = n_over_d(the_ps->par1_xhgmr);
   //  the_ps->xhgmr2 = n_over_d(the_ps->par2_xhgmr);
@@ -788,6 +939,7 @@ void print_pedigree_stats(FILE* fh, Pedigree_stats* the_pedigree_stats, bool ver
     print_d_r(fh, the_pedigree_stats->par2_R);
     print_d_r(fh, the_pedigree_stats->d);
     print_d_r(fh, the_pedigree_stats->z);
+    //fprintf(fh, " %ld %ld ", the_pedigree_stats->d.n, the_pedigree_stats->d.d);
     //print_d_r(fh, the_pedigree_stats->d_old);
 
   }else{ // print ratios but not numerators and denominators
@@ -808,7 +960,7 @@ void print_pedigree_normalized(FILE* fh, Pedigree* the_pedigree){
   //double mean_hgmr, double mean_R, double mean_d, double mean_z){
   Accession* F = the_pedigree->F;
   Accession* M = the_pedigree->M;
-  fprintf(fh, "%s  %s  %ld  ", (F != NULL)? F->id->a : "NA", (M != NULL)? M->id->a : "NA",  the_pedigree->pedigree_stats->all_good_count);
+  fprintf(fh, "%s\t%s\t%ld\t", (F != NULL)? F->id->a : "NA", (M != NULL)? M->id->a : "NA",  the_pedigree->pedigree_stats->all_good_count);
   print_normalized_pedigree_stats(fh, the_pedigree->pedigree_stats);
 }
 
@@ -820,13 +972,14 @@ void print_normalized_pedigree_stats(FILE* fh, Pedigree_stats* the_pedigree_stat
   print_double_nan_as_hyphen(fh, the_pedigree_stats->hgmr2_n);
   print_double_nan_as_hyphen(fh, the_pedigree_stats->R2_n);
   print_double_nan_as_hyphen(fh, the_pedigree_stats->d_n);
+  // print_double_nan_as_hyphen(fh, the_pedigree_stats->ftc_n);
 }
 
 void print_double_nan_as_hyphen(FILE* fh, double x){
   if(isnan(x)){
-    fprintf(fh, "-  ");
+    fprintf(fh, "-\t");
   }else{
-    fprintf(fh, "%7.5lf  ", x);
+    fprintf(fh, "%7.5lf\t", x);
   }
 }
 
@@ -889,10 +1042,10 @@ Vpedigree* read_and_store_pedigrees_3col(FILE* p_stream, Vidxid* the_gt_vidxid, 
   long not_in_genotypes_set_count = 0;
   long no_parent_gts_count = 0; // counts the accessions with neither parent having genotypes
   Vpedigree* pedigrees = construct_vpedigree(1000);
+  
   while((nread = getline(&line, &len, p_stream)) != -1){
     Vstr* fields = construct_vstr(3);
     char* token = strtok_r(line, "\t \n\r", &saveptr);
- 
     push_to_vstr(fields, strcpy((char*)malloc((strlen(token)+1)*sizeof(char)), token)); // store copy of accession id
     while(1){
       token = strtok_r(NULL, "\t \n\r", &saveptr);
@@ -904,20 +1057,37 @@ Vpedigree* read_and_store_pedigrees_3col(FILE* p_stream, Vidxid* the_gt_vidxid, 
     char* fempar_id = ith_str_from_vstr(fields, 1);
     char* malpar_id = ith_str_from_vstr(fields, 2);  
     long acc_idx, fempar_idx, malpar_idx;
-  
+ 
     if(strcmp(acc_id, "NA") != 0){ // id of this accession is not "NA" 
       acc_idx = index_of_id_in_vidxid(the_gt_vidxid, acc_id);
       Accession* Acc = the_gtsset->accessions->a[acc_idx]; // id->index;
       if(acc_idx == ID_NA_INDEX){ // no genotypes for this accession
 	not_in_genotypes_set_count++;
       }else{ // have genotypes for this accession
+
 	fempar_idx = index_of_id_in_vidxid(the_gt_vidxid, fempar_id);
 	malpar_idx = index_of_id_in_vidxid(the_gt_vidxid, malpar_id);	 
-	if( (fempar_idx != ID_NA_INDEX) || (malpar_idx != ID_NA_INDEX) ){ // pedigree file gives at least 1 parent for which there are genotypes
-	   
+	if( (fempar_idx != ID_NA_INDEX) || (malpar_idx != ID_NA_INDEX) ){ // pedigree file has at least 1 parent for which there are genotypes
+
+	  /* bool gt1pedigree = false; */
+	  /* if(Acc->has_pedigree){ */
+	  /*   gt1pedigree = true; */
+	  /*   long fidx = Acc->Fpar_idx;	     */
+	  /*   char* fid = (fidx == ID_NA_INDEX)? "NA": the_gtsset->accessions->a[fidx]->id->a; */
+	  /*   long midx = Acc->Mpar_idx;	     */
+	  /*   char* mid = (midx == ID_NA_INDEX)? "NA" : the_gtsset->accessions->a[midx]->id->a; */
+	  /*   fprintf(stderr, "offspring %s  Fpar %s  Mpar %s \n", Acc->id->a, fid, mid);  */
+	  /* } */
 	  Acc->has_pedigree = true;
 	  Acc->Fpar_idx = fempar_idx;
 	  Acc->Mpar_idx = malpar_idx;
+	  /* if(gt1pedigree){ */
+	  /*   long fidx = Acc->Fpar_idx;	     */
+	  /*   char* fid = (fidx == ID_NA_INDEX)? "NA": the_gtsset->accessions->a[fidx]->id->a; */
+	  /*   long midx = Acc->Mpar_idx;	     */
+	  /*   char* mid = (midx == ID_NA_INDEX)? "NA" : the_gtsset->accessions->a[midx]->id->a; */
+	  /*   fprintf(stderr, "   offspring %s  Fpar %s  Mpar %s \n\n", Acc->id->a, fid, mid); */
+	  /* } */
 	  Accession* Fpar = (fempar_idx != ID_NA_INDEX)?
 	    the_gtsset->accessions->a[fempar_idx] : NULL; // id->index;
 	  Accession* Mpar = (malpar_idx != ID_NA_INDEX)?

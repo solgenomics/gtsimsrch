@@ -421,11 +421,11 @@ main(int argc, char *argv[])
   // rectify_markers(the_genotypes_set); // swap dosage 0 and 2 for markers with dosage 2 more common, so afterward 0 more common than 2 for all markers.
 
   //check_genotypesset(the_genotypes_set);
-  if(do_filtering) filter_genotypesset(the_genotypes_set, out_stream);
-  fprintf(stdout, "# %s \n", the_genotypes_set->acc_filter_info->a);
-  fprintf(out_stream, "# %s \n", the_genotypes_set->acc_filter_info->a);
-  fprintf(stdout, "# %s \n", the_genotypes_set->marker_filter_info->a);
-  fprintf(out_stream, "# %s \n", the_genotypes_set->marker_filter_info->a);
+  if(do_filtering) filter_genotypesset(the_genotypes_set);
+  fprintf(stdout, "# %s", the_genotypes_set->acc_filter_info->a);
+  fprintf(out_stream, "# %s", the_genotypes_set->acc_filter_info->a);
+  fprintf(stdout, "# %s", the_genotypes_set->marker_filter_info->a);
+  fprintf(out_stream, "# %s", the_genotypes_set->marker_filter_info->a);
   //  store_homozygs(the_genotypes_set); // homozygs are not needed for duplicate_search
   long n_accessions = the_genotypes_set->accessions->size;   
   long n_markers = the_genotypes_set->n_markers;
@@ -1051,9 +1051,9 @@ void* check_est_distances_1thread(void* x){ // and also get the full distances i
 long print_results(Vaccession* the_accessions, Vmci** query_vmcis, FILE* ostream, long output_format){
   long distance_count = 0;
 
-  fprintf(ostream, "# id1  md1  id2  md2  agmr  hgmr  ");
+  fprintf(ostream, "#\tid1\tmd1\tid2\tmd2\tagmr\thgmr");
   if(output_format != 1){
-    fprintf(ostream, "usable_chunks matching_chunks est_agmr normalized_agmr");
+    fprintf(ostream, "\tusable_chunks matching_chunks\test_agmr\tnormalized_agmr");
   }
   fprintf(ostream, "\n");
     
@@ -1067,7 +1067,7 @@ long print_results(Vaccession* the_accessions, Vmci** query_vmcis, FILE* ostream
     
       //double phased_mismatch_rate = pmr(q_acc, m_acc);
       //fprintf(ostream, "%s  %s  %8.6f %8.6f ", q_acc->id->a, m_acc->id->a, the_mci->agmr, the_mci->hgmr);
-      fprintf(ostream, "%s %ld  %s %ld  %8.6f %8.6f ", // %8.6f",
+      fprintf(ostream, "%s\t%ld\t%s\t%ld\t%8.6f\t%8.6f", // %8.6f",
 	      q_acc->id->a, q_acc->missing_data_count, m_acc->id->a, m_acc->missing_data_count,
 	      the_mci->agmr, the_mci->hgmr); //, the_mci->psr);
       //  fprintf(ostream, " %7.5f %7.5f ", hetrats.x1, hetrats.x2);
@@ -1075,7 +1075,7 @@ long print_results(Vaccession* the_accessions, Vmci** query_vmcis, FILE* ostream
        fprintf(ostream, " %ld %ld %ld ", hetinfo.l1, hetinfo.l2, hetinfo.l3); /* */
       if(output_format != 1){
 	// double agmr_norm = (the_mci->agmr0 > 0)? the_mci->agmr/the_mci->agmr0 : -1;
-	fprintf(ostream, "  %6.2f %ld %7.5f ", // %7.5f ",
+	fprintf(ostream, "\t%6.2f\t%ld\t%7.5f ", // %7.5f ",
 		the_mci->usable_chunks, the_mci->n_matching_chunks, the_mci->est_dist); //, agmr_norm); //the_mci->agmr0);
       }
       fprintf(ostream, "\n");
